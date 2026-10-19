@@ -81,7 +81,7 @@ const CONFIG = {
     // { src: 'assets/me.png', w: 35, h: 22 },
     // { src: 'assets/you.png', w: 31, h: 22 },
   ] },
-  sky: { stars: 1 / 1300, milkyWay: 1 / 160, twinkles: 32, dots: 70 },   // 星的密度（每多少平方像素一颗）、会闪的星数
+  sky: { image: 'assets/galaxy.webp', dim: 0.2, stars: 1 / 1300, milkyWay: 1 / 160, twinkles: 32, dots: 70 },   // 天空照片（设成 null 就用代码画的星空）、照片压暗多少、代码星空的密度、会闪的星数
   bright: [ { x: 0.30, y: 0.24, size: 50, tint: '255,246,230' }, { x: 0.66, y: 0.33, size: 42, tint: '255,214,226' } ],   // 两颗亮星
   meteor: { every: [3000, 8000], pairChance: 0.25 },   // 流星隔多久一颗（毫秒，范围里随机）、两颗前后脚的概率（开场第一颗跟标题一起出来）
   // 开场时间线（毫秒）
@@ -94,11 +94,17 @@ const CONFIG = {
   let seed = 7; const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
   const STAR = 'M12 1Q13.43 10.57 23 12Q13.43 13.43 12 23Q10.57 13.43 1 12Q10.57 10.57 12 1Z';
 
-  // ── 天：散星 + 一条斜着的银河（全是小点堆出来） ──
+  // ── 天：有照片就铺照片；没有就画散星 + 一条斜着的银河（全是小点堆出来） ──
+  const sky = new Image();
   function drawSky() {
     const cv = $('sgSky'), W = innerWidth, H = innerHeight, d = Math.min(3, devicePixelRatio || 1), c = cv.getContext('2d');
     cv.width = Math.round(W * d); cv.height = Math.round(H * d); c.setTransform(d, 0, 0, d, 0, 0);
-    c.fillStyle = '#030305'; c.fillRect(0, 0, W, H); c.fillStyle = '#fff'; seed = 7;
+    c.fillStyle = '#030305'; c.fillRect(0, 0, W, H);
+    if (sky.naturalWidth) {   // 照片：铺满（cover），再压暗一点让星更显
+      const k = Math.max(W / sky.naturalWidth, H / sky.naturalHeight), w = sky.naturalWidth * k, h = sky.naturalHeight * k;
+      c.drawImage(sky, (W - w) / 2, (H - h) / 2, w, h); c.fillStyle = 'rgba(3,3,5,' + C.sky.dim + ')'; c.fillRect(0, 0, W, H); return;
+    }
+    c.fillStyle = '#fff'; seed = 7;
     const dot = (x, y, r, a) => { c.globalAlpha = a; c.beginPath(); c.arc(x, y, r, 0, 6.2832); c.fill(); };
     for (let i = 0, n = Math.round(W * H * C.sky.stars); i < n; i++) dot(rnd() * W, rnd() * H, .35 + rnd() * rnd() * 1.1, .25 + rnd() * .6);
     const ax = W * 1.1, ay = H * .05, bx = -W * .1, by = H * .8, len = Math.hypot(bx - ax, by - ay), ux = (bx - ax) / len, uy = (by - ay) / len;
@@ -162,7 +168,6 @@ const CONFIG = {
     painted = true; if (performance.now() >= landAt) land.classList.add('ready');
   }
   src.onload = paintLand; if (src.complete) paintLand();
-  drawSky();
   addEventListener('resize', () => { drawSky(); paintLand(); });
 
   // ── 流星：右上 → 左下，头在前 ──
@@ -187,8 +192,10 @@ const CONFIG = {
     B.classList.remove('intro');
     setTimeout(meteor, 1200);
   }
-  if (matchMedia('(prefers-reduced-motion: reduce)').matches) finish();
-  else {
+  let started = false;
+  function start() {
+    if (started) return; started = true; drawSky();
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return finish();
     at(T.sky, () => $('sgSky').classList.add('in'));
     at(T.stars, () => $('sgStars').classList.add('in'));
     at(T.land, () => { landAt = 0; if (painted) land.classList.add('ready'); });
@@ -196,8 +203,10 @@ const CONFIG = {
     at(T.sprites, () => sp.classList.add('in'));
     at(T.title, () => { $('sgHead').classList.add('in'); shoot(0); });
     at(T.end, finish);
-    document.addEventListener('click', (e) => { if (!done) { e.stopPropagation(); finish(); } }, true);
   }
+  document.addEventListener('click', (e) => { if (!done) { e.stopPropagation(); start(); finish(); } }, true);
+  // 有照片就等它（最多 1.5 秒）再开场；照片来晚了也补画上去
+  if (C.sky.image) { sky.onload = () => (started ? drawSky() : start()); sky.onerror = start; sky.src = C.sky.image; setTimeout(start, 1500); } else start();
 })();
 </script>
 </body>
